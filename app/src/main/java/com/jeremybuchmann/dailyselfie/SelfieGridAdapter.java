@@ -21,6 +21,11 @@ public class SelfieGridAdapter extends BaseAdapter
 	private Context _context;
 	private List<Selfie> _selfies;
 
+	/**
+	 * Constructor. Initializes private members.
+	 *
+	 * @param inContext
+	 */
 	public SelfieGridAdapter(Context inContext)
 	{
 		_context = inContext;

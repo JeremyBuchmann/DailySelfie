@@ -13,6 +13,8 @@ public class Selfie
 	private Bitmap _image;
 	private Date _date;
 
+	// TODO: create a third parameter which is a URI of the image file
+
 	public Selfie(Bitmap inImage, Date inDate)
 	{
 		_image = inImage;

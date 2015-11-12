@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">DailySelfie</string>
     <string name="photo_button_title">Take Photo</string>
+    <string name="delete_all_photos">Delete All Photos</string>
     <string name="bad_photo_result">The photo app was canceled or crashed. No photo was retrieved.</string>
 </resources>
