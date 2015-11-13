@@ -1,6 +1,7 @@
 package com.jeremybuchmann.dailyselfie;
 
 import android.graphics.Bitmap;
+import android.net.Uri;
 
 import java.util.Date;
 
@@ -12,13 +13,13 @@ public class Selfie
 {
 	private Bitmap _image;
 	private Date _date;
+	private Uri _imageLocation;
 
-	// TODO: create a third parameter which is a URI of the image file
-
-	public Selfie(Bitmap inImage, Date inDate)
+	public Selfie(Bitmap inImage, Date inDate, Uri inImageURI)
 	{
 		_image = inImage;
 		_date = inDate;
+		_imageLocation = inImageURI;
 	}
 
 	public Date getDate()
@@ -31,13 +32,8 @@ public class Selfie
 		return _image;
 	}
 
-	public void setDate(Date inDate)
+	public Uri getURI()
 	{
-		this._date = inDate;
-	}
-
-	public void setImage(Bitmap inImage)
-	{
-		this._image = inImage;
+		return _imageLocation;
 	}
 }

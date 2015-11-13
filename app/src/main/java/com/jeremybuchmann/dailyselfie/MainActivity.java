@@ -4,6 +4,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.ThumbnailUtils;
+import android.net.Uri;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -15,6 +18,11 @@ import android.view.MenuItem;
 import android.widget.GridView;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Random;
 
@@ -27,6 +35,7 @@ public class MainActivity extends AppCompatActivity
 	private final int PHOTO_REQUEST_CODE = 1;
 	private GridView _gridView;
 	private SelfieGridAdapter _gridAdapter;
+	private Uri _photoLocation;
 
 	/**
 	 * @param savedInstanceState
@@ -102,7 +111,26 @@ public class MainActivity extends AppCompatActivity
 				// If the device has a camera, send an Intent to open the photo app
 				Intent getPhotoIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
 				if (getPhotoIntent.resolveActivity(packageManager) != null) {
-					startActivityForResult(getPhotoIntent, PHOTO_REQUEST_CODE);
+
+					// Create a file where we want the full size image to be saved
+					File imageFile = null;
+					try {
+
+						imageFile = File.createTempFile(
+							"Selfie_" + new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()),
+							".jpg",
+							Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+						);
+
+					} catch (IOException ex) {
+						// TODO: what do we do here?
+					}
+
+					if (imageFile != null) {
+						_photoLocation = Uri.fromFile(imageFile);
+						getPhotoIntent.putExtra(MediaStore.EXTRA_OUTPUT, _photoLocation);
+						startActivityForResult(getPhotoIntent, PHOTO_REQUEST_CODE);
+					}
 				}
 
 			} else {
@@ -119,8 +147,9 @@ public class MainActivity extends AppCompatActivity
 				int sampleImageResourceId = getResources().getIdentifier("sample_" + picNum, "drawable", this.getPackageName());
 				Bitmap sampleImage = BitmapFactory.decodeResource(getResources(), sampleImageResourceId);
 
-				// TODO: give Selfie() a 3rd parameter which is a URI of the image file
-				_gridAdapter.add(new Selfie(sampleImage, new Date()));
+				_photoLocation = Uri.parse("android.resource://" + this.getPackageName() + "/" + sampleImageResourceId);
+
+				_gridAdapter.add( new Selfie(sampleImage, new Date(), _photoLocation) );
 			}
 
 			return true;
@@ -128,6 +157,8 @@ public class MainActivity extends AppCompatActivity
 		} else if (item.getItemId() == R.id.action_delete) {
 
 			Log.i(TAG, "deleting all photos");
+
+			// TODO: Display a dialog asking whether to actually delete all the photos
 
 			return true;
 
@@ -153,13 +184,26 @@ public class MainActivity extends AppCompatActivity
 
 				Log.i(TAG, "got photo, adding it to grid");
 
-				Bundle extras = data.getExtras();
-				Bitmap photoBitmap = (Bitmap) extras.get("data");
+				// This code only works when you don't save the full size image to a file.
+				// When you do, the data passed into this method is null
+				//Bundle extras = data.getExtras();
+				//Bitmap photoBitmap = (Bitmap) extras.get("data");
 
-				// TODO: give Selfie() a 3rd parameter which is a URI of the image file
-				_gridAdapter.add(new Selfie(photoBitmap, new Date()));
+				// Generate a thumbnail from the image file; we know the Uri is _photoLocation
+				try {
 
-				// TODO: start an AsyncTask to save the file to the filesystem
+					// TODO: fix the thumbnail sizing
+					int thumbnailSize = _gridView.getColumnWidth();
+
+					InputStream is = getContentResolver().openInputStream(_photoLocation);
+					Bitmap thumbnail = ThumbnailUtils.extractThumbnail(BitmapFactory.decodeStream(is), thumbnailSize, thumbnailSize);
+					_gridAdapter.add( new Selfie(thumbnail, new Date(), _photoLocation) );
+
+				} catch (FileNotFoundException fnfe) {
+					// TODO: what do we do here?
+				}
+
+
 
 			} else {
 
@@ -168,5 +212,6 @@ public class MainActivity extends AppCompatActivity
 			}
 		}
 	}
+
 
 }
