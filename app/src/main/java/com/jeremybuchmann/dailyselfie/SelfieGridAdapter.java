@@ -114,4 +114,11 @@ public class SelfieGridAdapter extends BaseAdapter
 
 		return selfieLayout;
 	}
+
+	public boolean remove(Selfie selfie)
+	{
+		boolean result = _selfies.remove(selfie);
+		notifyDataSetChanged();
+		return result;
+	}
 }

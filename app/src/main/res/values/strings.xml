@@ -2,5 +2,8 @@
     <string name="app_name">DailySelfie</string>
     <string name="photo_button_title">Take Photo</string>
     <string name="delete_all_photos">Delete All Photos</string>
+    <string name="cancel">Cancel</string>
     <string name="bad_photo_result">The photo app was canceled or crashed. No photo was retrieved.</string>
+    <string name="storage_not_available">Could not load photos because external storage is not available</string>
+    <string name="delete_all_photos_confirm">Are you sure you want to delete ALL seflies?</string>
 </resources>
