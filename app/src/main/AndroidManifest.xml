@@ -23,6 +23,8 @@
         <activity android:name=".PhotoViewActivity"
                   android:label="View Photo">
         </activity>
+        <receiver android:name=".AlarmReceiver" >
+        </receiver>
     </application>
 
 </manifest>

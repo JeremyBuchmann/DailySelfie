@@ -1,6 +1,10 @@
 package com.jeremybuchmann.dailyselfie;
 
+import android.app.AlarmManager;
 import android.app.DialogFragment;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -8,6 +12,7 @@ import android.graphics.BitmapFactory;
 import android.media.ThumbnailUtils;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
@@ -35,7 +40,7 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 
 /**
- *
+ * The main activity for this app
  */
 public class MainActivity extends AppCompatActivity
 	implements DeleteAllDialogFragment.DeleteAllDialogListener
@@ -44,15 +49,22 @@ public class MainActivity extends AppCompatActivity
 	public static final int GET_PHOTO_REQUEST_CODE = 1;
 	public static final String SELFIE_KEY = "com.jeremybuchmann.DailySelfie.SELFIE_TO_SHOW";
 	private static String _DELETE_ALL_PHOTOS = "deleteall";
+	private static String _DATETIME_FORMAT = "yyyyMMdd'T'HHmmss";
+	private static String _FILENAME_PREFIX = "Selfie_";
+	private static String _FILENAME_REGEX = "Selfie_(.*)\\.jpg";
+	private static long _ALARM_INTERVAL = 1000 * 60 * 2;
 	private GridView _gridView;
 	private SelfieGridAdapter _gridAdapter;
 	private Uri _photoLocation;
-	private static String _datetimeFormat = "yyyyMMdd'T'HHmmss";
-	private static String _filenamePrefix = "Selfie_";
-	private static String _filenameRegex = "Selfie_(.*)\\.jpg";
+	private AlarmManager _alarmManager;
+	private PendingIntent _alarmIntent;
 	private CountDownLatch _uiLayoutSignal;
 
 	/**
+	 * Sets up the user interface, creates callbacks for handling important
+	 * events, and creates an alarm to notify the user of when to take
+	 * a selfie
+	 *
 	 * @param savedInstanceState
 	 */
 	@Override
@@ -80,6 +92,7 @@ public class MainActivity extends AppCompatActivity
 				Intent photoViewIntent = new Intent(MainActivity.this, PhotoViewActivity.class);
 				photoViewIntent.putExtra(SELFIE_KEY, selectedSelfie.getURI());
 
+				// Start the activity for viewing a single photo
 				startActivity(photoViewIntent);
 			}
 		});
@@ -88,7 +101,9 @@ public class MainActivity extends AppCompatActivity
 		// UI is done being laid out
 		_uiLayoutSignal = new CountDownLatch(1);
 
-		// Create a listener for when the UI is finished with the layout
+		// Create a listener for when the UI is finished with the layout. The
+		// thread that adds the thumbnails must wait until the gridview is
+		// finished with its layout before it can add the thumbnails
 		_gridView.getViewTreeObserver().addOnGlobalLayoutListener(
 			new ViewTreeObserver.OnGlobalLayoutListener() {
 				@Override
@@ -96,7 +111,6 @@ public class MainActivity extends AppCompatActivity
 				{
 					// Signal the other thread (below) to load the saved
 					// images into the grid
-					Log.i(TAG, "gridview layout finished. columnwidth = " + _gridView.getColumnWidth());
 					_uiLayoutSignal.countDown();
 				}
 			}
@@ -106,7 +120,7 @@ public class MainActivity extends AppCompatActivity
 		if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
 
 			// Start a new thread to handle the loading of the images from
-			// the filesystem and the bitmap generation
+			// the filesystem and the thumbnail generation
 			new Thread( new Runnable() {
 
 				@Override
@@ -117,12 +131,10 @@ public class MainActivity extends AppCompatActivity
 					FileFilter selfieFilter = new FileFilter() {
 						@Override
 						public boolean accept(File file) {
-							Log.i(TAG, "BG: checking file " + file.getAbsolutePath());
-							return file.getName().matches(_filenameRegex);
+							return file.getName().matches(_FILENAME_REGEX);
 						}
 					};
 					File[] imageFiles = imageDir.listFiles(selfieFilter);
-					Log.i(TAG, "BG: loaded " + imageFiles.length + " images from storage");
 
 					if (imageFiles.length > 0) {
 
@@ -131,19 +143,17 @@ public class MainActivity extends AppCompatActivity
 						Arrays.sort(imageFiles);
 
 						try {
-							Log.i(TAG, "BG: waiting for layout to finish");
-
 							// Wait for the UI to finish its layout
 							_uiLayoutSignal.await();
 
 							// Create a parser for the date/time part of the filename
-							SimpleDateFormat dateParser = new SimpleDateFormat(_datetimeFormat);
+							SimpleDateFormat dateParser = new SimpleDateFormat(_DATETIME_FORMAT);
 
 							// Add the images to the grid
 							for (File imageFile : imageFiles) {
 								final Uri imageFileURI = Uri.fromFile(imageFile);
 								final Bitmap thumbnail = generateThumbnail(imageFileURI);
-								final Date imageDate = dateParser.parse(imageFile.getName().replace(_filenamePrefix, "").replace(".jpg", ""));
+								final Date imageDate = dateParser.parse(imageFile.getName().replace(_FILENAME_PREFIX, "").replace(".jpg", ""));
 
 								// Use View.post to add the image to the grid
 								// on the UI thread
@@ -151,20 +161,16 @@ public class MainActivity extends AppCompatActivity
 									@Override
 									public void run()
 									{
-										Log.i(TAG, "BG: adding loaded image to gridview");
 										_gridAdapter.add(new Selfie(thumbnail, imageDate, imageFileURI));
 									}
 								});
 							}
 						} catch (InterruptedException ie) {
 							Log.e(TAG, "BG: Caught InterruptedException while waiting for countdown latch: " + ie);
-							// TODO: what do we do here?
 						} catch (ParseException pse) {
 							Log.e(TAG, "BG: Caught ParseException while trying to generate a thumbnail for a stored image: " + pse);
-							// TODO: what do we do here?
 						} catch (FileNotFoundException fnfe) {
 							Log.e(TAG, "BG: Caught FileNotFoundException while trying to generate a thumbnail for a stored image: " + fnfe);
-							// TODO: what do we do here?
 						}
 					}
 				}
@@ -174,49 +180,16 @@ public class MainActivity extends AppCompatActivity
 			Log.e(TAG, "cannot read photos; external storage is in state " + Environment.getExternalStorageState());
 			Toast.makeText(this, R.string.storage_not_available, Toast.LENGTH_LONG).show();
 		}
+
+		// Create an alarm to remind the user to take a selfie
+		_alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+		_alarmIntent = PendingIntent.getBroadcast(this, 0, new Intent(this, AlarmReceiver.class), 0);
+		_alarmManager.setRepeating(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + _ALARM_INTERVAL, _ALARM_INTERVAL, _alarmIntent);
 	}
 
 	/**
+	 * Handle the result from the camera
 	 *
-	 */
-	@Override
-	protected void onStart()
-	{
-		super.onStart();
-		Log.i(TAG, "onStart()");
-	}
-
-	/**
-	 *
-	 */
-	@Override
-	protected void onResume()
-	{
-		super.onResume();
-		Log.i(TAG, "onResume()");
-	}
-
-	/**
-	 *
-	 */
-	@Override
-	protected void onPause()
-	{
-		super.onPause();
-		Log.i(TAG, "onPause()");
-	}
-
-	/**
-	 *
-	 */
-	@Override
-	protected void onStop()
-	{
-		super.onStop();
-		Log.i(TAG, "onStop()");
-	}
-
-	/**
 	 * @param requestCode
 	 * @param resultCode
 	 * @param data
@@ -225,26 +198,17 @@ public class MainActivity extends AppCompatActivity
 	protected void onActivityResult(int requestCode, int resultCode, Intent data)
 	{
 		if (requestCode == GET_PHOTO_REQUEST_CODE) {
-
 			if (resultCode == RESULT_OK) {
-
-				Log.i(TAG, "got photo, adding it to grid");
-
-				// Generate a thumbnail from the image file; we know the Uri is _photoLocation
+				// Generate a thumbnail from the image file and add it to
+				// the grid; we know the Uri is _photoLocation
 				try {
-
 					Bitmap thumbnail = generateThumbnail(_photoLocation);
 					_gridAdapter.add( new Selfie(thumbnail, new Date(), _photoLocation) );
-
 				} catch (FileNotFoundException fnfe) {
 					Log.e(TAG, "Caught a FileNotFoundException while trying to generate a thumbnail from the snapped photo: " + fnfe);
-					// TODO: what do we do here?
 				}
-
 			} else {
-
 				Toast.makeText(this, R.string.bad_photo_result, Toast.LENGTH_LONG).show();
-
 			}
 		}
 	}
@@ -264,19 +228,21 @@ public class MainActivity extends AppCompatActivity
 	}
 
 	/**
+	 * Callback for the "Delete all Photos" confirmation button. Deletes
+	 * all of the photos.
 	 *
 	 * @param fragment
 	 */
 	@Override
 	public void onConfirmDeleteAllPhotos(android.app.DialogFragment fragment)
 	{
-		Log.i(TAG, "onConfirmDeleteAllPhotos()");
-
 		int numToDelete = _gridAdapter.getCount();
+
 		for (int i = numToDelete - 1; i >= 0; i--) {
 			Selfie selfie = (Selfie) _gridAdapter.getItem(i);
 			selfie.remove();
 		}
+
 		_gridAdapter.clear();
 	}
 
@@ -291,7 +257,10 @@ public class MainActivity extends AppCompatActivity
 	public boolean onOptionsItemSelected(MenuItem item)
 	{
 		if (item.getItemId() == R.id.action_photo) {
-			Log.i(TAG, "launching photo");
+
+			// Cancel any notifications
+			NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+			notificationManager.cancelAll();
 
 			// Check whether the device has a camera
 			PackageManager packageManager = getPackageManager();
@@ -305,27 +274,28 @@ public class MainActivity extends AppCompatActivity
 					File imageFile = null;
 					try {
 
-						SimpleDateFormat format = new SimpleDateFormat(_datetimeFormat);
-						String imageFilename = _filenamePrefix + format.format(new Date()) + ".jpg";
+						// Create the filename
+						SimpleDateFormat format = new SimpleDateFormat(_DATETIME_FORMAT);
+						String imageFilename = _FILENAME_PREFIX + format.format(new Date()) + ".jpg";
 
+						// Create the File object
 						imageFile = new File(
 							Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
 							imageFilename
 						);
 
-						if (!imageFile.createNewFile()) {
+						// Create the actual file on the filesystem and
+						// start the camera activity
+						if (imageFile.createNewFile()) {
+							_photoLocation = Uri.fromFile(imageFile);
+							getPhotoIntent.putExtra(MediaStore.EXTRA_OUTPUT, _photoLocation);
+							startActivityForResult(getPhotoIntent, GET_PHOTO_REQUEST_CODE);
+						} else {
 							Log.e(TAG, "Could not create new file " + imageFilename + ". It probably already exists");
 						}
 
 					} catch (IOException ex) {
 						Log.e(TAG, "Caught IOException while trying to create a file for saving the photo: " + ex);
-						// TODO: what do we do here?
-					}
-
-					if (imageFile != null) {
-						_photoLocation = Uri.fromFile(imageFile);
-						getPhotoIntent.putExtra(MediaStore.EXTRA_OUTPUT, _photoLocation);
-						startActivityForResult(getPhotoIntent, GET_PHOTO_REQUEST_CODE);
 					}
 				}
 
@@ -352,8 +322,8 @@ public class MainActivity extends AppCompatActivity
 
 		} else if (item.getItemId() == R.id.action_delete) {
 
-			Log.i(TAG, "asking whether to delete all photos");
-
+			// Show the confirmation dialog asking whether to really delete
+			// all photos
 			DialogFragment deleteAllDialog = new DeleteAllDialogFragment();
 			deleteAllDialog.show(getFragmentManager(), _DELETE_ALL_PHOTOS);
 
@@ -368,16 +338,14 @@ public class MainActivity extends AppCompatActivity
 
 
 	/**
+	 * Generates a thumbnail from a larger image's Uri
 	 *
 	 * @param photoUri
 	 * @return
 	 */
 	private Bitmap generateThumbnail(Uri photoUri) throws FileNotFoundException
 	{
-		// TODO: fix the thumbnail sizing
 		int thumbnailSize = _gridView.getColumnWidth();
-		Log.i(TAG, "_gridView.columnWidth = " + thumbnailSize);
-
 		InputStream is = getContentResolver().openInputStream(photoUri);
 		Bitmap thumbnail = ThumbnailUtils.extractThumbnail(BitmapFactory.decodeStream(is), thumbnailSize, thumbnailSize);
 		return thumbnail;

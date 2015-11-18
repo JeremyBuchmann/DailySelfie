@@ -9,7 +9,8 @@ import android.support.v7.app.AlertDialog;
 import android.util.Log;
 
 /**
- *
+ * Implements a confirmation dialog for asking whether to delete all
+ * selfies
  */
 public class DeleteAllDialogFragment extends DialogFragment
 {
@@ -45,6 +46,12 @@ public class DeleteAllDialogFragment extends DialogFragment
 		}
 	}
 
+	/**
+	 * Creates the dialog
+	 *
+	 * @param savedInstanceState
+	 * @return
+	 */
 	@Override
 	public Dialog onCreateDialog(Bundle savedInstanceState)
 	{
@@ -56,7 +63,6 @@ public class DeleteAllDialogFragment extends DialogFragment
 		builder.setPositiveButton(R.string.delete_all_photos, new DialogInterface.OnClickListener() {
 			public void onClick(DialogInterface dialog, int id)
 			{
-				Log.i(TAG, "deleting all photos...");
 				_listener.onConfirmDeleteAllPhotos(DeleteAllDialogFragment.this);
 			}
 		});

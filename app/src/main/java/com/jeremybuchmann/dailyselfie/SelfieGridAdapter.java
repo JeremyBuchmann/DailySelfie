@@ -115,6 +115,12 @@ public class SelfieGridAdapter extends BaseAdapter
 		return selfieLayout;
 	}
 
+	/**
+	 * Removes a Selfie from the list
+	 *
+	 * @param selfie
+	 * @return
+	 */
 	public boolean remove(Selfie selfie)
 	{
 		boolean result = _selfies.remove(selfie);
